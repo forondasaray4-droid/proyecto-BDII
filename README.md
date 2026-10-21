@@ -29,6 +29,7 @@ Ejecutar los scripts de la carpeta `sql/` **en este orden** (desde MySQL Workben
 2. `datos_prueba.sql` – inserta los datos de prueba (mínimo 10 registros por tabla)
 3. `procedimientos.sql` – crea los procedimientos almacenados
 4. `triggers.sql` – crea los triggers
+5. `clase10_seguridad_citas.sql` – roles, vistas seguras, cifrado, auditoría, usuarios y políticas de contraseñas (Clase 10)
 
 ## Modelo de datos
 
@@ -81,3 +82,50 @@ proyecto-BDII/
 ## Autor
 
 Saray Foronda Restrepo– Bases de Datos II, docente Jhon James Cano Sánchez
+
+## Seguridad (Clase 10)
+
+El script `sql/clase10_seguridad_citas.sql` agrega seguridad por capas sobre `proyecto_citas`: roles, vistas que enmascaran datos, hash y cifrado de datos sensibles, un procedimiento `SQL SECURITY DEFINER`, auditoría y políticas de cuentas. Se ejecuta como `root`, después de los scripts anteriores y de `Clase9/clase8_funciones_usuarios.sql`.
+
+> Las contraseñas y la llave de cifrado del script son **solo de práctica**. En un sistema real se toman de variables de entorno o de un gestor de secretos y no se suben al repositorio.
+
+### Matriz de seguridad
+
+| Objeto | `rol_consulta_citas` | `rol_recepcion_citas` | `rol_admin_citas` |
+|---|---|---|---|
+| `vw_pacientes_publico` (vista, datos enmascarados) | SELECT | SELECT (heredado) | SELECT |
+| `vw_citas_detalle` (vista, JOIN de 5 tablas) | SELECT | SELECT (heredado) | SELECT |
+| `paciente`, `cita`, `historial_medico` (tablas) | — | — | SELECT, INSERT, UPDATE, DELETE |
+| `medico`, `especialidad`, `centro_salud`, `recordatorio` (tablas) | — | — | SELECT, INSERT, UPDATE, DELETE |
+| `auditoria_paciente` (tabla) | — | — | SELECT (solo lectura) |
+| `sp_agendar_cita_segura` (DEFINER) | — | EXECUTE | EXECUTE |
+| `sp_cancelar_cita` | — | EXECUTE | EXECUTE |
+| `fn_validar_login_citas` | — | EXECUTE | EXECUTE |
+| Demás procedimientos y funciones | — | — | EXECUTE |
+| DROP TABLE / CREATE USER | — | — | — |
+
+### Usuarios
+
+| Usuario | Rol (por defecto) | Política de cuenta |
+|---|---|---|
+| `lector_citas` | `rol_consulta_citas` | La contraseña vence cada 90 días |
+| `recepcion_citas` | `rol_recepcion_citas` | Máximo 2 conexiones y 500 consultas por hora |
+| `gestor_citas` | `rol_admin_citas` | Sin restricciones adicionales |
+
+La política `simple_password_check` exige mínimo 8 caracteres, un dígito, mayúscula y minúscula, y un carácter especial.
+
+### Protección de datos sensibles
+
+| Dato | Técnica |
+|---|---|
+| PIN del paciente (`paciente.pin_hash`) | SHA-256 con sal aleatoria por paciente (`paciente.sal`); se valida con `fn_validar_login_citas` |
+| Observaciones médicas (`historial_medico.observaciones_cifrado`) | Cifrado AES con `AES_ENCRYPT` / `AES_DECRYPT` |
+| Documento, teléfono y correo | Enmascarados en `vw_pacientes_publico` con `fn_enmascarar` |
+
+### Auditoría
+
+El trigger `trg_auditar_paciente_update` registra en `auditoria_paciente` el campo modificado, el valor anterior y el nuevo, `USER()`, `CURRENT_USER()` y la fecha. El PIN nunca se copia a la auditoría. El rol administrador solo tiene SELECT sobre esa tabla, por lo que no puede borrar la evidencia.
+
+### Procedimiento de agendamiento seguro
+
+`sp_agendar_cita_segura(documento, id_medico, fecha, hora, motivo)` valida con `SIGNAL SQLSTATE '45000'` que el paciente y el médico existan, que la fecha no sea pasada y que la hora esté dentro del horario del médico. Se ejecuta con los privilegios de su creador, de modo que el rol de recepción agenda citas sin tener INSERT sobre la tabla `cita`.
