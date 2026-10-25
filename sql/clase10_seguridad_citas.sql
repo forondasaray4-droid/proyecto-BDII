@@ -9,7 +9,7 @@
 -- REQUISITOS (ya existentes en el proyecto):
 --   * Esquema, datos de prueba, procedimientos y triggers (carpeta sql/).
 --   * Funciones de la clase 9: fn_clasificar_edad, fn_calcular_descuento,
---     fn_contar_citas_paciente (clase8_funciones_usuarios.sql).
+--     fn_contar_citas_paciente (funciones.sql).
 --   * Plugin simple_password_check activo (ver Ejercicio 6).
 --
 -- Ejecutar como root, por secciones (cada ejercicio por separado).

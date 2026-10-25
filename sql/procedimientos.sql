@@ -1,7 +1,8 @@
 -- =========================================================
 -- Archivo: procedimientos.sql
--- Procedimientos almacenados (IN, OUT, INOUT)
+-- Procedimientos almacenados (IN, OUT, INOUT) con validaciones SIGNAL
 -- =========================================================
+SET NAMES utf8mb4;
 USE proyecto_citas;
 
 DROP PROCEDURE IF EXISTS sp_registrar_paciente;
@@ -14,7 +15,9 @@ DELIMITER $$
 
 -- ---------------------------------------------------------
 -- 1. Registrar un paciente (IN + OUT)
--- Recibe los datos del paciente y devuelve el id asignado.
+-- Valida los datos y devuelve el id asignado.
+-- Errores (SIGNAL 45000): datos obligatorios vacíos, documento
+-- ya registrado, fecha de nacimiento futura.
 -- ---------------------------------------------------------
 CREATE PROCEDURE sp_registrar_paciente(
   IN p_documento VARCHAR(15),
@@ -27,17 +30,34 @@ CREATE PROCEDURE sp_registrar_paciente(
   OUT p_id_paciente INT
 )
 BEGIN
+  IF p_documento IS NULL OR TRIM(p_documento) = ''
+     OR p_nombre IS NULL OR TRIM(p_nombre) = ''
+     OR p_apellido IS NULL OR TRIM(p_apellido) = '' THEN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'Documento, nombre y apellido son obligatorios';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM paciente WHERE documento = p_documento) THEN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'Ya existe un paciente con ese documento';
+  END IF;
+
+  IF p_fecha_nacimiento IS NULL OR p_fecha_nacimiento > CURDATE() THEN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'La fecha de nacimiento no es valida';
+  END IF;
+
   INSERT INTO paciente (documento, nombre, apellido, fecha_nacimiento, telefono, correo, direccion)
   VALUES (p_documento, p_nombre, p_apellido, p_fecha_nacimiento, p_telefono, p_correo, p_direccion);
 
-  SELECT id_paciente INTO p_id_paciente
-  FROM paciente
-  WHERE documento = p_documento;
+  SET p_id_paciente = LAST_INSERT_ID();
 END$$
 
 -- ---------------------------------------------------------
 -- 2. Agendar una cita (IN + OUT)
 -- Crea la cita en estado 'Programada' y devuelve su id.
+-- Errores (SIGNAL 45000): paciente o médico inexistente, fecha pasada.
+-- La disponibilidad y el horario los valida trg_validar_cita.
 -- ---------------------------------------------------------
 CREATE PROCEDURE sp_agendar_cita(
   IN p_id_paciente INT,
@@ -48,21 +68,53 @@ CREATE PROCEDURE sp_agendar_cita(
   OUT p_id_cita INT
 )
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM paciente WHERE id_paciente = p_id_paciente) THEN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'El paciente no existe';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM medico WHERE id_medico = p_id_medico) THEN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'El medico no existe';
+  END IF;
+
+  IF p_fecha IS NULL OR p_hora IS NULL OR p_fecha < CURDATE() THEN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'La fecha de la cita no puede ser pasada';
+  END IF;
+
   INSERT INTO cita (id_paciente, id_medico, fecha, hora, motivo)
   VALUES (p_id_paciente, p_id_medico, p_fecha, p_hora, p_motivo);
 
-  SELECT MAX(id_cita) INTO p_id_cita
-  FROM cita;
+  SET p_id_cita = LAST_INSERT_ID();
 END$$
 
 -- ---------------------------------------------------------
 -- 3. Cancelar una cita (IN)
--- Cambia el estado de la cita y cancela su recordatorio pendiente.
+-- Cambia el estado de la cita y cancela su recordatorio pendiente
+-- en una sola transacción.
+-- Errores (SIGNAL 45000): cita inexistente o que no está Programada.
 -- ---------------------------------------------------------
 CREATE PROCEDURE sp_cancelar_cita(
   IN p_id_cita INT
 )
 BEGIN
+  DECLARE v_estado VARCHAR(20) DEFAULT NULL;
+
+  SELECT estado INTO v_estado
+  FROM cita
+  WHERE id_cita = p_id_cita;
+
+  IF v_estado IS NULL THEN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'La cita no existe';
+  ELSEIF v_estado <> 'Programada' THEN
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT = 'Solo se pueden cancelar citas en estado Programada';
+  END IF;
+
+  START TRANSACTION;
+
   UPDATE cita
   SET estado = 'Cancelada'
   WHERE id_cita = p_id_cita;
@@ -70,6 +122,8 @@ BEGIN
   UPDATE recordatorio
   SET estado = 'Cancelado'
   WHERE id_cita = p_id_cita AND estado = 'Pendiente';
+
+  COMMIT;
 END$$
 
 -- ---------------------------------------------------------
