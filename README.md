@@ -5,7 +5,7 @@ Proyecto de Bases de Datos II (COTECNOVA, 2026). Base de datos en MariaDB para g
 - **Autora:** Saray Foronda Restrepo
 - **Docente:** Jhon James Cano Sánchez
 - **Avance 2 (segundo corte):** etiqueta `avance-2`
-- **Video de sustentación:** [ENLACE_VIDEO]
+- **Video de sustentación:** https://drive.google.com/file/d/1HNi2bk2MWJ6LJHqQXN-8wpyttmbwKF1h/view?usp=drive_link
 - **Informe:** `docs/Avance2_Foronda_Saray.pdf`
 
 ## Requisitos
