@@ -1,0 +1,6 @@
+# Secretos y respaldos: nunca se suben al repositorio
+.respaldo.env
+scripts/.respaldo.env
+.env
+respaldos/
+*.sql.gz
