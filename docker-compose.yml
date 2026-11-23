@@ -1,5 +1,7 @@
+# Las contraseñas se leen de scripts/.respaldo.env (no se suben al repositorio):
+#   docker compose --env-file scripts/.respaldo.env up -d --build
 services:
-  # Servicio de la aplicación PHP
+  # Aplicación PHP (opcional)
   app:
     build:
       context: .
@@ -15,16 +17,20 @@ services:
     depends_on:
       - db
 
-  # Servicio de base de datos (MariaDB/MySQL)
+  # Base de datos MariaDB
   db:
     image: mariadb:10.8
     container_name: citas_mariadb
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_ROOT_PASSWORD: ${DB_PASS:?Defina DB_PASS en scripts/.respaldo.env}
       MYSQL_DATABASE: proyecto_citas
-      MYSQL_USER: dev_user
-      MYSQL_PASSWORD: dev_password
+      TZ: America/Bogota
+    command:
+      - --event-scheduler=ON
+      - --log-bin-trust-function-creators=1
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
     ports:
       - "3306:3306"
     volumes:
@@ -32,15 +38,13 @@ services:
     networks:
       - bbdd_network
 
-  # Servicio de phpMyAdmin (interfaz gráfica para la BD)
+  # phpMyAdmin (opcional)
   phpmyadmin:
     image: phpmyadmin/phpmyadmin:latest
     container_name: citas_phpmyadmin
     restart: unless-stopped
     environment:
       PMA_HOST: db
-      PMA_USER: root
-      PMA_PASSWORD: root_password
       UPLOAD_LIMIT: 100M
     ports:
       - "8081:80"
@@ -49,11 +53,9 @@ services:
     depends_on:
       - db
 
-# Volúmenes persistentes (los datos de la BD persisten, aunque se borren los contenedores)
 volumes:
   db_data:
 
-# Red interna personalizada para que los contenedores se "vean" por nombre
 networks:
   bbdd_network:
     driver: bridge
