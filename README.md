@@ -187,19 +187,18 @@ original sigue **Programada** con su recordatorio **Pendiente**.
 ## Optimización
 
 Se generaron 10.015 citas (`seq_1_to_10000`) y se midieron 7 consultas frecuentes con `EXPLAIN` y `ANALYZE FORMAT=JSON`
-(mediana de 7 ejecuciones) con `sql/optimizacion_medicion.sql`. Antes solo existían los índices que InnoDB crea por cada llave foránea.
+(una ejecución por consulta; por debajo de 1 ms las diferencias son ruido) con `sql/optimizacion_medicion.sql`. Antes solo existían los índices que InnoDB crea por cada llave foránea.
 
-<!-- Reemplazar los tiempos con las mediciones del propio equipo (capturas en capturas/clase13) -->
 
 | # | Consulta | type / key antes | Filas antes | Tiempo antes | Índice creado | type / key después | Filas después | Tiempo después |
 |---|---|---|---|---|---|---|---|---|
-| Q1 | Agenda de un médico en un mes (JOIN + rango + ORDER BY) | ref / fk_cita_medico | 502 | 1.10 ms | `idx_cita_medico_fecha_hora` | range / idx_cita_medico_fecha_hora | 88 | 0.37 ms |
-| Q2 | Últimas 10 citas de un paciente (ORDER BY DESC + LIMIT) | ref / fk_cita_paciente | 5 | 0.06 ms | `idx_cita_paciente_fecha` | ref / idx_cita_paciente_fecha | 5 | 0.06 ms |
-| Q3 | Citas de marzo por estado (rango + GROUP BY) | index / fk_cita_estado | 9853 | 13.63 ms | `idx_cita_fecha_estado` | range / idx_cita_fecha_estado | 1760 | 1.00 ms |
-| Q4 | Citas de marzo con `YEAR()/MONTH()` → reescrita con rango | ALL / NULL | 9853 | 1.74 ms | `idx_cita_fecha_estado` | range / idx_cita_fecha_estado | 1760 | 0.40 ms |
-| Q5 | Recordatorios pendientes (WHERE + ORDER BY) | ALL / NULL | 9815 | 2.09 ms | `idx_recordatorio_estado_envio` | range / idx_recordatorio_estado_envio | 3 | 0.02 ms |
-| Q6 | Atenciones de un centro en un trimestre (JOIN 3 tablas) | ref / fk_cita_medico | 246 | 0.76 ms | `idx_cita_medico_fecha_hora` | ref / idx_cita_medico_fecha_hora | 246 | 0.42 ms |
-| Q7 | Pacientes por apellido (`LIKE 'Gar%'`) | ALL / NULL | 1982 | 0.90 ms | `idx_paciente_apellido_nombre` | range / idx_paciente_apellido_nombre | 100 | 0.05 ms |
+| Q1 | Agenda de un médico en un mes (JOIN + rango + ORDER BY) | ref / fk_cita_medico | 502 | 1.11 ms | `idx_cita_medico_fecha_hora` | range / idx_cita_medico_fecha_hora | 88 | 0.39 ms |
+| Q2 | Últimas 10 citas de un paciente (ORDER BY DESC + LIMIT) | ref / fk_cita_paciente | 5 | 0.055 ms | `idx_cita_paciente_fecha` | ref / idx_cita_paciente_fecha | 5 | 0.083 ms |
+| Q3 | Citas de marzo por estado (rango + GROUP BY) | index / fk_cita_estado | 9853 | 12.90 ms | `idx_cita_fecha_estado` | range / idx_cita_fecha_estado | 1760 | 0.97 ms |
+| Q4 | Citas de marzo con `YEAR()/MONTH()` → reescrita con rango | ALL / NULL | 9853 | 2.67 ms | `idx_cita_fecha_estado` | range / idx_cita_fecha_estado | 1760 | 0.56 ms |
+| Q5 | Recordatorios pendientes (WHERE + ORDER BY) | ALL / NULL | 9815 | 3.31 ms | `idx_recordatorio_estado_envio` | range / idx_recordatorio_estado_envio | 3 | 0.045 ms |
+| Q6 | Atenciones de un centro en un trimestre (JOIN 3 tablas) | ref / fk_cita_medico | 246 | 0.75 ms | `idx_cita_medico_fecha_hora` | ref / idx_cita_medico_fecha_hora | 246 | 0.54 ms |
+| Q7 | Pacientes por apellido (`LIKE 'Gar%'`) | ALL / NULL | 1982 | 0.92 ms | `idx_paciente_apellido_nombre` | range / idx_paciente_apellido_nombre | 100 | 0.063 ms |
 
 **Justificación de los índices** (igualdad primero, rango u orden después):
 
