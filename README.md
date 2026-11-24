@@ -9,44 +9,68 @@ para los centros de salud del municipio de Cartago (Valle del Cauca).
 - **Etiqueta del proyecto final:** `final`
 - **Informe:** `docs/InformeFinal_Foronda_Saray.pdf` · **Presentación:** `docs/Presentacion.pdf`
 
-## Requisitos
+## Requisitos (programas que deben estar instalados antes)
 
-- Windows con WSL (Ubuntu) y Docker Desktop (Docker Compose v2)
-- Un cliente SQL opcional: MySQL Workbench o phpMyAdmin (`http://localhost:8081`)
-- `cron` en WSL para el respaldo automático (`sudo service cron start`)
+| Programa | Para qué se usa | Cómo comprobarlo |
+|---|---|---|
+| Windows 10/11 con **WSL 2** y una distribución **Ubuntu** | Terminal donde se ejecutan los scripts (`.sh`) | `wsl -l -v` (en PowerShell) |
+| **Docker Desktop** con la integración de WSL activada (Settings → Resources → WSL integration) y **Docker Compose v2** | Levanta MariaDB 10.8, PHP/Apache y phpMyAdmin | `docker --version` y `docker compose version` (en Ubuntu) |
+| **Git** | Clonar el repositorio | `git --version` |
+| `cron` (en Ubuntu) | Respaldo automático | `sudo service cron start` |
+| *Opcional:* MySQL Workbench | Ver el modelo (`docs/MER.mwb`) y consultar la base | — |
+
+Además:
+- Docker Desktop debe estar **abierto y en estado "running"** antes de empezar.
+- Los puertos **3306** (MariaDB), **8080** (app PHP) y **8081** (phpMyAdmin) deben estar libres. Si otro programa usa el 3306 (por ejemplo un MySQL de Windows), deténgalo o cambie el mapeo en `docker-compose.yml` (por ejemplo `"3307:3306"`).
+- No hace falta instalar MariaDB ni PHP en el equipo: corren dentro de los contenedores.
 
 ## Instalación (desde cero)
 
+Todos los comandos se ejecutan en la terminal de **Ubuntu (WSL)**, no en PowerShell.
+
 ```bash
-git clone https://github.com/forondasaray4-droid/proyecto-BDII
+# 1. Clonar el repositorio
+git clone https://github.com/forondasaray4-droid/proyecto-BDII.git
 cd proyecto-BDII
 
-# 1. Credenciales (el archivo real NO se sube al repositorio: está en .gitignore)
+# 2. Credenciales (el archivo real NO se sube al repositorio: está en .gitignore)
 cp scripts/respaldo.env.ejemplo scripts/.respaldo.env
 chmod 600 scripts/.respaldo.env
-nano scripts/.respaldo.env            # cambiar los valores CAMBIAR_...
+nano scripts/.respaldo.env            # cambiar todos los valores CAMBIAR_... (Ctrl+O, Enter, Ctrl+X)
 
-# 2. Levantar los contenedores (MariaDB 10.8, PHP/Apache y phpMyAdmin)
+# 3. Levantar los contenedores (MariaDB 10.8, PHP/Apache y phpMyAdmin)
 docker compose --env-file scripts/.respaldo.env up -d --build
+docker ps                             # deben verse citas_mariadb, citas_app y citas_phpmyadmin
 
-# 3. Crear TODA la base de datos desde cero (esquema, datos, rutinas, triggers,
-#    vistas, seguridad, índices y eventos)
+# 4. Crear TODA la base de datos desde cero (esquema, datos, rutinas, triggers,
+#    vistas, seguridad, índices y eventos). Termina con un resumen de objetos.
 ./instalar.sh
 
-# 4. (Opcional) Ejecutar los casos de prueba: resultado esperado vs obtenido
-./instalar.sh --pruebas
+# 5. (Recomendado) Ejecutar los 60 casos de prueba: resultado esperado vs obtenido
+./instalar.sh --pruebas               # al final debe mostrar: OK 60
 ```
 
-Notas:
-- `instalar.sh` **borra y recrea** la base `proyecto_citas` (`01_esquema.sql`). Es repetible.
-- Si el contenedor de la base tiene otro nombre: `CONTENEDOR=sge_mariadb ./instalar.sh`.
-- La contraseña de `root` se fija la **primera vez** que se crea el volumen. Si ya existe un volumen de un
-  avance anterior con otra contraseña, use esa misma en `DB_PASS` o elimine el volumen
-  (`docker compose down -v`, borra los datos; todo se reconstruye con `./instalar.sh`).
-- Los valores del `.respaldo.env` no deben llevar comillas simples ni espacios. Las contraseñas de usuario
-  deben cumplir la política (8+ caracteres, dígito, mayúscula, minúscula y símbolo).
-- Servicios: MariaDB `3306` (contenedor `citas_mariadb`), app PHP `http://localhost:8080`,
-  phpMyAdmin `http://localhost:8081` (usuario `root` y la contraseña de `DB_PASS`).
+Resultado esperado de `./instalar.sh`: 12 tablas, 3 vistas, 10 procedimientos, 5 funciones, 5 triggers,
+2 eventos y 10.015 citas.
+
+**Accesos**
+- MariaDB: `127.0.0.1:3306`, usuario `root`, contraseña `DB_PASS` (de `scripts/.respaldo.env`).
+- phpMyAdmin: `http://localhost:8081` · App PHP de prueba: `http://localhost:8080`.
+
+**Apagar y volver a instalar**
+```bash
+docker compose --env-file scripts/.respaldo.env down        # apaga (conserva los datos)
+docker compose --env-file scripts/.respaldo.env down -v     # apaga y BORRA la base; luego repetir los pasos 3 a 5
+```
+(`--env-file` es necesario porque `docker-compose.yml` exige `DB_PASS`.)
+
+**Problemas frecuentes**
+- `required variable DB_PASS is missing a value`: falta `--env-file scripts/.respaldo.env` o el archivo no existe (paso 2).
+- `Ports are not available` / `port is already allocated`: otro programa usa el 3306, 8080 u 8081.
+- `ERROR 1045 Access denied` al instalar: el volumen guarda una contraseña de `root` anterior. Use esa en `DB_PASS` o ejecute `down -v` y repita los pasos 3 a 5.
+- Si el contenedor de la base tiene otro nombre: `CONTENEDOR=nombre ./instalar.sh`.
+- `instalar.sh` **borra y recrea** la base `proyecto_citas`; es repetible.
+- Los valores del `.respaldo.env` no deben llevar comillas simples ni espacios. Las contraseñas de usuario deben cumplir la política (8+ caracteres, dígito, mayúscula, minúscula y símbolo).
 
 ## Usuarios de prueba y su rol
 
@@ -86,7 +110,7 @@ proyecto-BDII/
 │   ├── restaurar_simulacro.sh  Simulacro de recuperación verificado con CHECKSUM
 │   ├── restaurar.sh          Restauración real de la base y los usuarios
 │   └── respaldo.env.ejemplo  Plantilla de credenciales (el real no se sube)
-├── modelado/MER.mwb          Modelo editable en MySQL Workbench
+├── docs/MER.mwb, MER.png     Modelo editable en MySQL Workbench y su imagen
 ├── docs/                     MER, informes y presentación
 ├── capturas/                 Evidencias por clase y de este final
 └── src/                      Página PHP de prueba
